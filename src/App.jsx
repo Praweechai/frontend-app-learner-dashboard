@@ -10,7 +10,7 @@ import { Alert } from '@openedx/paragon';
 import Dashboard from 'containers/Dashboard';
 
 import AppWrapper from 'containers/AppWrapper';
-import LearnerDashboardHeader from 'containers/LearnerDashboardHeader';
+import LearnerDashboardHeader from 'elmp/ClassroomHeader'; // ELMP: Classroom header (see ELMP-CHANGES.md)
 
 import { getConfig } from '@edx/frontend-platform';
 import { useInitializeLearnerHome } from 'data/hooks';

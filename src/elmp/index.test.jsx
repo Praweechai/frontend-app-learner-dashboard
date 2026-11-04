@@ -18,10 +18,10 @@ describe('ELMP slot wiring', () => {
     expect(slots[FOOTER].keepDefault).toBe(false);
   });
 
-  it('renders our widget instead of the default footer', async () => {
+  it('removes the Open edX footer', async () => {
     applyElmpPluginSlots();
 
-    render(
+    const { container } = render(
       <IntlProvider locale="en">
         <PluginSlot id={FOOTER} idAliases={['footer_slot']}>
           <div>default footer</div>
@@ -29,7 +29,8 @@ describe('ELMP slot wiring', () => {
       </IntlProvider>,
     );
 
-    expect(await screen.findByTestId('elmp-footer-test')).toHaveTextContent('ELMP footer test');
+    await new Promise((r) => { setTimeout(r, 0); });
     expect(screen.queryByText('default footer')).toBeNull();
+    expect(container.textContent).toBe('');
   });
 });
