@@ -47,7 +47,7 @@ subscribe(APP_READY, () => {
         <ContextProviders>
           <QueryClientProvider client={queryClient}>
             <Routes>
-              <Route path="/" element={<PageWrap><App /></PageWrap>} />
+              <Route path="/*" element={<PageWrap><App /></PageWrap>} /> {/* ELMP: nested Classroom routes */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </QueryClientProvider>

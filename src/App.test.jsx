@@ -19,6 +19,7 @@ jest.mock('@edx/frontend-component-footer', () => ({
   FooterSlot: jest.fn(() => <div>FooterSlot</div>),
 }));
 jest.mock('containers/Dashboard', () => jest.fn(() => <div>Dashboard</div>));
+jest.mock('elmp/ClassroomPages', () => jest.fn(() => <div>Dashboard</div>)); // ELMP
 jest.mock('containers/LearnerDashboardHeader', () => jest.fn(() => <div>LearnerDashboardHeader</div>));
 jest.mock('elmp/ClassroomHeader', () => jest.fn(() => <div>LearnerDashboardHeader</div>)); // ELMP
 jest.mock('containers/AppWrapper', () => jest.fn(({ children }) => <div className="AppWrapper">{children}</div>));

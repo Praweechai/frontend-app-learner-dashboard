@@ -7,7 +7,7 @@ import { ErrorPage } from '@edx/frontend-platform/react';
 import { FooterSlot } from '@edx/frontend-component-footer';
 import { Alert } from '@openedx/paragon';
 
-import Dashboard from 'containers/Dashboard';
+import Dashboard from 'elmp/ClassroomPages'; // ELMP: Classroom pages S-70/S-72/S-73 (see ELMP-CHANGES.md)
 
 import AppWrapper from 'containers/AppWrapper';
 import LearnerDashboardHeader from 'elmp/ClassroomHeader'; // ELMP: Classroom header (see ELMP-CHANGES.md)
