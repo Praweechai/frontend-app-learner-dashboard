@@ -1,0 +1,49 @@
+# ELMP fork CI (Plan 3 · doc 08 §1): upstream lint + tests and the fork diff guard.
+# Upstream workflows only run on master/PRs; the image itself is built by elmp-classroom-kit.
+name: elmp-ci
+
+on:
+  push:
+    branches: [elmp/verawood]
+  pull_request:
+    branches: [elmp/verawood]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+  diff-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Upstream files changed vs release/verawood (NFR-C11)
+        run: |
+          git fetch --quiet "https://github.com/openedx/${GITHUB_REPOSITORY#*/}.git" release/verawood
+          changed=$(git diff --name-only FETCH_HEAD...HEAD \
+            | grep -vE '^(src/elmp/|ELMP-CHANGES\.md$|\.github/workflows/elmp-)' || true)
+          count=$(printf '%s' "$changed" | grep -c . || true)
+          echo "Upstream files changed: ${count}"
+          printf '%s\n' "$changed"
+          [ "$count" -le 25 ] || { echo "::error::More than 25 upstream files changed"; exit 1; }
+          missing=0
+          for f in $changed; do
+            grep -qF "\`$f\`" ELMP-CHANGES.md || { echo "::error file=$f::not listed in ELMP-CHANGES.md"; missing=1; }
+          done
+          exit $missing

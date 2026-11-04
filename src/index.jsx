@@ -28,6 +28,7 @@ import { configuration } from './config';
 import messages from './i18n';
 
 import App from './App';
+import './elmp'; // ELMP: Classroom slot wiring (see ELMP-CHANGES.md)
 
 const queryClient = new QueryClient({
   defaultOptions: {
