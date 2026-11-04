@@ -7,3 +7,4 @@ Rule (C-8): plugin slots first; an upstream file is edited only when no slot or 
 | Upstream file | Change | Why | Undo |
 |---------------|--------|-----|------|
 | `src/index.jsx` | `import './elmp';` (1 line) | Loads our slot wiring. tutor-mfe overwrites `env.config.jsx` at build time and `mergeConfig` is shallow, so slots are merged after config load (P3-1.03) | Delete the line |
+| `src/index.test.jsx` | `jest.mock('./elmp', () => ({}))` (1 line) | Upstream test reads `subscribe` calls by position; our module adds one | Delete the line |

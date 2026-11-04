@@ -34,6 +34,7 @@ jest.mock('@edx/frontend-platform', () => ({
 }));
 
 jest.mock('./App', () => 'App');
+jest.mock('./elmp', () => ({})); // ELMP: keep upstream subscribe() call order
 
 describe('app registry', () => {
   let getElement;
