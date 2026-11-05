@@ -32,6 +32,7 @@ const me = {
     photo_url: null,
     unread_notifications: 4,
     has_portal_work: false,
+    features: { ce_hours: true },
   },
 };
 const note = {
@@ -95,6 +96,14 @@ describe('ELMP Classroom header (P3-4.01/4.04, F-98, F-100)', () => {
     renderHeader('en', '/hours');
     await screen.findByRole('button', { name: 'Account menu for Nok Srisuk' });
     expect(within(screen.getByRole('banner')).getByRole('link', { name: 'CE hours' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('Plan 4 F-112: no CE hours tab when the switch is off', async () => {
+    mockClient.me.mockResolvedValue({ data: { ...me.data, features: { ce_hours: false } } });
+    renderHeader();
+    await screen.findByRole('button', { name: 'Account menu for Nok Srisuk' });
+    expect(screen.queryByRole('link', { name: 'CE hours' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('banner')).getByRole('link', { name: 'Certificates' })).toBeInTheDocument();
   });
 
   it('falls back to the Open edX user when the Portal is down (NFR-C8)', async () => {

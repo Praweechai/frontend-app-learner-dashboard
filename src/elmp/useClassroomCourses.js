@@ -9,6 +9,7 @@ import { useInitializeLearnerHome } from 'data/hooks';
 import { baseAppUrl } from 'data/services/lms/urls';
 
 const progressCache = new Map();
+const BASE_CERTS = '/learner-dashboard/certificates';
 
 export async function fetchCompletion(courseId) {
   if (progressCache.has(courseId)) { return progressCache.get(courseId); }
@@ -36,8 +37,16 @@ export function toCourseView(courseData, completion) {
     course = {}, courseRun = {}, enrollment = {}, certificate = {}, gradeData = {},
   } = courseData;
   const passed = Boolean(gradeData?.isPassing || certificate?.isEarned);
+  // Plan 4 F-111: Completed ("passed") = grade passes AND every unit done; passed with units left = "almost".
+  // Units unknown (progress call failed) → the grade decides alone, as in Plan 3.
+  const allUnits = !completion || completion.done >= completion.total;
   let state = 'not_started';
-  if (passed) { state = 'passed'; } else if (enrollment?.hasStarted || completion?.done > 0) { state = 'in_progress'; }
+  if (passed && allUnits) {
+    state = 'passed';
+  } else if (passed) {
+    state = 'almost';
+  } else if (enrollment?.hasStarted || completion?.done > 0) { state = 'in_progress'; }
+  const pct = completion ? Math.round((completion.done * 100) / completion.total) : Number(passed) * 100;
   return {
     key: courseRun?.courseId,
     title: course?.courseName || courseRun?.courseId || '',
@@ -46,11 +55,11 @@ export function toCourseView(courseData, completion) {
     href: absolute(courseRun?.homeUrl),
     resumeHref: courseRun?.resumeUrl ? absolute(courseRun.resumeUrl) : undefined,
     state,
-    progress: completion ? Math.round((completion.done * 100) / completion.total) : Number(passed) * 100,
+    progress: state === 'passed' ? 100 : Math.min(pct, 99),
     units: completion?.total,
     unitsDone: completion?.done,
-    certificateUrl: certificate?.isEarned && certificate?.certPreviewUrl
-      ? absolute(certificate.certPreviewUrl) : undefined,
+    // Plan 4 F-113: certificates are the Portal's PDFs (Certificates page); the Open edX page is not linked.
+    certificateUrl: state === 'passed' && certificate?.isEarned ? BASE_CERTS : undefined,
     lastEnrolled: enrollment?.lastEnrolled,
   };
 }

@@ -38,6 +38,8 @@ export const useClassroomUser = () => {
     username: authenticatedUser?.username,
     unread: data?.unread_notifications || 0,
     hasPortalWork: Boolean(data?.has_portal_work),
+    // Plan 4 CA-01 switches; Portal down or older Portal → CE hours hidden (they come from the Portal anyway)
+    features: data?.features || {},
     status: me.status,
     error: me.error,
     user: {
@@ -59,14 +61,18 @@ const ElmpClassroomHeader = () => {
   const [params, setParams] = useSearchParams();
   const trigger = useRef(null);
   const {
-    user, unread: initialUnread, hasPortalWork, username,
+    user, unread: initialUnread, hasPortalWork, username, features,
   } = useClassroomUser();
   const [unread, setUnread] = useUnreadCount(initialUnread);
   const open = params.get('messages') === '1';
   const list = useMessageList(open);
 
   const current = currentTab(location.pathname);
-  const links = { ...classroomLinks(config), portal: hasPortalWork ? config.ELMP_PORTAL_HOME_URL : undefined };
+  const links = {
+    ...classroomLinks(config),
+    hours: features.ce_hours ? classroomLinks(config).hours : undefined, // Plan 4 F-112
+    portal: hasPortalWork ? config.ELMP_PORTAL_HOME_URL : undefined,
+  };
   const setOpen = (value) => {
     const next = new URLSearchParams(params);
     if (value) { next.set('messages', '1'); } else { next.delete('messages'); }

@@ -99,7 +99,7 @@ describe('ELMP Classroom pages (P3-4.02…4.05)', () => {
     useInitializeLearnerHome.mockReturnValue({
       data: { courses: [courseData(KEY, 'Isolation Precautions')] }, isPending: false,
     });
-    mockClient.me.mockResolvedValue({ data: { first_name: { en: 'Nok', th: 'นก' }, name: { en: 'Nok Srisuk' } } });
+    mockClient.me.mockResolvedValue({ data: { first_name: { en: 'Nok', th: 'นก' }, name: { en: 'Nok Srisuk' }, features: { ce_hours: true } } });
     mockClient.training.mockResolvedValue(training);
     mockClient.certificates.mockResolvedValue(certificates);
     mockClient.hours.mockImplementation((year) => Promise.resolve(hours(year || 2026)));
@@ -150,6 +150,13 @@ describe('ELMP Classroom pages (P3-4.02…4.05)', () => {
     await waitFor(() => expect(mockClient.hours).toHaveBeenLastCalledWith(2025, undefined));
   });
 
+  it('Plan 4 F-112: CE hours switched off → /hours goes home', async () => {
+    mockClient.me.mockResolvedValue({ data: { first_name: { en: 'Nok', th: 'นก' }, name: { en: 'Nok Srisuk' }, features: { ce_hours: false } } });
+    renderAt('/hours');
+    expect(await screen.findByRole('heading', { level: 1, name: /Nok$/ })).toBeInTheDocument();
+    expect(mockClient.hours).not.toHaveBeenCalledWith(2025, undefined);
+  });
+
   it('unknown paths go home', async () => {
     renderAt('/nowhere');
     expect(await screen.findByRole('heading', { level: 1, name: /Nok$/ })).toBeInTheDocument();
@@ -172,8 +179,20 @@ describe('ELMP data helpers', () => {
     });
     expect(v.resumeHref).toBe(`http://local.openedx.io/courses/${KEY}/jump_to/u3`);
     const passed = toCourseView(courseData(KEY, 'X', { gradeData: { isPassing: true }, certificate: { isEarned: true, certPreviewUrl: '/certificates/abc' } }));
-    expect(passed).toMatchObject({ state: 'passed', progress: 100, certificateUrl: 'http://local.openedx.io/certificates/abc' });
+    expect(passed).toMatchObject({ state: 'passed', progress: 100, certificateUrl: '/learner-dashboard/certificates' });
     expect(toCourseView(courseData(KEY, 'X', { enrollment: { hasStarted: false } })).state).toBe('not_started');
+  });
+
+  it('Plan 4 F-111: passed by quiz with units left = almost, never 100 %; all units = completed', () => {
+    const quizOnly = toCourseView(courseData(KEY, 'X', { gradeData: { isPassing: true } }), { done: 5, total: 7 });
+    expect(quizOnly).toMatchObject({
+      state: 'almost', progress: 71, units: 7, unitsDone: 5,
+    });
+    expect(quizOnly.certificateUrl).toBeUndefined();
+    const done = toCourseView(courseData(KEY, 'X', { gradeData: { isPassing: true } }), { done: 7, total: 7 });
+    expect(done).toMatchObject({ state: 'passed', progress: 100 });
+    const allUnitsQuizFailed = toCourseView(courseData(KEY, 'X'), { done: 7, total: 7 });
+    expect(allUnitsQuizFailed).toMatchObject({ state: 'in_progress', progress: 99 });
   });
 
   it('completion failure means no bar, and is cached per session', async () => {

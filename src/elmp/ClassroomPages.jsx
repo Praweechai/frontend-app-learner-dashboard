@@ -33,7 +33,7 @@ export const useCertificateDownload = () => {
 };
 
 export const HomePage = () => {
-  const { firstName } = useClassroomUser();
+  const { firstName, features } = useClassroomUser();
   const { courses, loading } = useClassroomCourses();
   const { hash } = useLocation();
   const training = usePortal((opts) => getPortalClient().training(opts));
@@ -52,7 +52,7 @@ export const HomePage = () => {
       trainingError={training.error}
       latestCertificate={latest}
       onDownloadCertificate={download}
-      links={{ courseHome: (c) => learningHome(c.course_key), hours: '/learner-dashboard/hours' }}
+      links={{ courseHome: (c) => learningHome(c.course_key), hours: features.ce_hours ? '/learner-dashboard/hours' : undefined }}
       highlightId={highlight}
       onRetry={training.reload}
     />
@@ -75,7 +75,10 @@ export const CertificatesPage = () => {
 
 export const HoursPage = () => {
   const [year, setYear] = useState(undefined);
+  const { features, status } = useClassroomUser();
   const hours = usePortal((opts) => getPortalClient().hours(year, opts), [year]);
+  // Plan 4 F-112: CE hours switched off (or unknown because the Portal is down) → home
+  if (status !== 'loading' && !features.ce_hours) { return <Navigate to="/" replace />; }
   return (
     <HoursView
       data={hours.data?.data}
