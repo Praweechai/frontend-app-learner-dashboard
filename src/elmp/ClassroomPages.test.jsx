@@ -1,5 +1,4 @@
 import { mergeConfig } from '@edx/frontend-platform';
-import { getAuthenticatedHttpClient } from '@edx/frontend-platform/auth';
 import { IntlProvider } from '@edx/frontend-platform/i18n';
 import { AppContext } from '@edx/frontend-platform/react';
 import {
@@ -8,49 +7,71 @@ import {
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
-import { useInitializeLearnerHome } from 'data/hooks';
 import ClassroomPages from './ClassroomPages';
-import { fetchCompletion, resetCompletionCache, toCourseView } from './useClassroomCourses';
+import {
+  courseHomeUrl, courseResumeUrl, unitUrl, viewStatus, withLinks,
+} from './useDashboard';
 import { targetPath } from './useMessages';
 import { toRoute } from './RouterLink';
 
 const mockClient = {
-  me: jest.fn(), training: jest.fn(), certificates: jest.fn(), hours: jest.fn(), certificateLink: jest.fn(),
+  me: jest.fn(),
+  dashboard: jest.fn(),
+  certificates: jest.fn(),
+  hours: jest.fn(),
+  certificateLink: jest.fn(),
+  unreadCount: jest.fn(),
+  notifications: jest.fn(),
+  markRead: jest.fn(),
+  markAllRead: jest.fn(),
 };
 jest.mock('@elmp/classroom-kit', () => ({
   ...jest.requireActual('@elmp/classroom-kit'),
   getPortalClient: () => mockClient,
 }));
-jest.mock('data/hooks', () => ({ useInitializeLearnerHome: jest.fn() }));
-jest.mock('@edx/frontend-platform/auth', () => ({ getAuthenticatedHttpClient: jest.fn() }));
+jest.mock('./language', () => jest.fn());
 
-const KEY = 'course-v1:MissionHospital+INF101+2026';
-const courseData = (key, name, extra = {}) => ({
-  course: { courseName: name, courseNumber: key.split('+')[1], bannerImgSrc: '/asset/banner.jpg' },
-  courseRun: { courseId: key, homeUrl: `http://apps.local.openedx.io/learning/course/${key}/home`, resumeUrl: `/courses/${key}/jump_to/u3` },
-  enrollment: { hasStarted: true, lastEnrolled: '2026-10-01' },
-  certificate: {},
-  gradeData: { isPassing: false },
-  ...extra,
-});
-const training = {
+const LEARN = 'http://apps.local.openedx.io/learning';
+const PSB = 'course-v1:MHB+PSB101+2026';
+const INF = 'course-v1:MHB+INF101+2026';
+const FIRE = 'course-v1:MHB+FIRE101+2026';
+
+// Portal CA-11 shape (doc 02 §6) — no links; the app adds them.
+const dashboard = {
   data: {
-    summary: {
-      overdue: 1, due_soon: 0, due_this_month: 0, completed: 0, ce_hours: 24, ce_target_hours: 40,
+    banner: { kind: 'overdue', n: 1, course: { en: 'Patient Safety Basics', th: 'พื้นฐานความปลอดภัยของผู้ป่วย' } },
+    gauge: { required_done_on_time_pct: 50, label: 'needs_attention' },
+    required_title: { en: 'New-hire Onboarding 2026', th: 'ปฐมนิเทศพนักงานใหม่ 2569' },
+    rings: {
+      enrolled: 3, completed: 1, hours_learned: 1.4, required_done: [1, 2], quizzes_passed: [3, 5], certificates: 1,
     },
-    continue: { course_key: KEY, assignment_id: 41 },
-    assignments: [{
-      id: 41,
-      roadmap: { id: 7, title: { en: 'Annual Infection Control 2026', th: 'ควบคุมการติดเชื้อประจำปี 2569' } },
-      status: 'overdue',
-      due_at: '2026-10-31T23:59:59+07:00',
-      days_left: -3,
-      progress_percent: 0,
-      completed_at: null,
-      courses: [{
-        course_key: KEY, title: { en: 'Isolation Precautions', th: 'การป้องกันการแพร่กระจายเชื้อ' }, status: 'in_progress', ce_hours: 3, enrolled: true,
-      }],
+    deadlines: [{
+      assignment_id: 6,
+      course_key: PSB,
+      code: 'PSB101',
+      category: 'safety',
+      title: { en: 'Patient Safety Basics', th: 'พื้นฐานความปลอดภัยของผู้ป่วย' },
+      roadmap: { en: 'New-hire Onboarding', th: 'ปฐมนิเทศพนักงานใหม่' },
+      due_at: '2026-10-10T23:59:59+07:00',
+      days_left: -27,
+      action: 'continue',
     }],
+    streak: { days: [true, true, false, true, true, true, false], current: 3, best: 6 },
+    courses: [
+      {
+        course_key: INF, code: 'INF101', category: 'clinical', title: { en: 'Infection Control', th: 'การควบคุมการติดเชื้อ' }, units_done: 5, units_total: 7, score_pct: 100, status: 'almost', required: true,
+      },
+      {
+        course_key: PSB, code: 'PSB101', category: 'safety', title: { en: 'Patient Safety Basics', th: 'พื้นฐานความปลอดภัยของผู้ป่วย' }, units_done: 1, units_total: 7, score_pct: null, status: 'overdue', required: true,
+      },
+      {
+        course_key: FIRE, code: 'FIRE101', category: 'general', title: { en: 'Fire Safety on the Ward', th: 'ความปลอดภัยจากอัคคีภัย' }, units_done: 0, units_total: 5, score_pct: null, status: 'not_started', required: false,
+      },
+    ],
+    next_quizzes: [{
+      course_key: PSB, block_id: 'block-v1:MHB+PSB101+2026+type@sequential+block@quiz', code: 'PSB101', title: { en: 'Final quiz', th: 'แบบทดสอบท้ายบท' }, questions: 8, minutes: 15,
+    }],
+    latest_certificate: null,
   },
 };
 const certificates = {
@@ -63,6 +84,9 @@ const hours = (year) => ({
     year, earned: 24, target: 40, remaining: 16, year_ends: `${year}-12-31`, items: [], years_available: [2025, 2026],
   },
 });
+const me = (features = { ce_hours: true, streak: true }) => ({
+  data: { first_name: { en: 'Nok', th: 'นก' }, name: { en: 'Nok Srisuk' }, features },
+});
 
 const renderAt = (path) => render(
   <IntlProvider locale="en">
@@ -74,10 +98,8 @@ const renderAt = (path) => render(
   </IntlProvider>,
 );
 
-describe('ELMP Classroom pages (P3-4.02…4.05)', () => {
-  const http = { get: jest.fn() };
+describe('ELMP Classroom pages (P4-5.01 Home 2.0 + My courses; P3 certificates, CE hours)', () => {
   const assign = jest.fn();
-
   const realLocation = window.location;
   beforeAll(() => {
     delete window.location;
@@ -87,47 +109,46 @@ describe('ELMP Classroom pages (P3-4.02…4.05)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    resetCompletionCache();
-    mergeConfig({
-      LMS_BASE_URL: 'http://local.openedx.io',
-      LEARNING_BASE_URL: 'http://apps.local.openedx.io/learning',
-    });
-    getAuthenticatedHttpClient.mockReturnValue(http);
-    http.get.mockResolvedValue({
-      data: { completion_summary: { complete_count: 3, incomplete_count: 5, locked_count: 0 } },
-    });
-    useInitializeLearnerHome.mockReturnValue({
-      data: { courses: [courseData(KEY, 'Isolation Precautions')] }, isPending: false,
-    });
-    mockClient.me.mockResolvedValue({ data: { first_name: { en: 'Nok', th: 'นก' }, name: { en: 'Nok Srisuk' }, features: { ce_hours: true } } });
-    mockClient.training.mockResolvedValue(training);
+    window.localStorage.clear();
+    mergeConfig({ LMS_BASE_URL: 'http://local.openedx.io', LEARNING_BASE_URL: LEARN });
+    mockClient.me.mockResolvedValue(me());
+    mockClient.dashboard.mockResolvedValue(dashboard);
     mockClient.certificates.mockResolvedValue(certificates);
     mockClient.hours.mockImplementation((year) => Promise.resolve(hours(year || 2026)));
     mockClient.certificateLink.mockResolvedValue({ data: { url: 'http://portal.local.openedx.io/classroom/certificates/x.pdf?signature=s' } });
+    mockClient.unreadCount.mockResolvedValue({ data: { unread: 0 } });
+    mockClient.notifications.mockResolvedValue({ data: [], meta: {} });
   });
 
-  it('S-70: greets, continues at the next unit, lists the required group and the course card', async () => {
+  it('S-90: dashboard from the Portal, links into the player', async () => {
     renderAt('/');
-    expect(await screen.findByRole('heading', { level: 1, name: /Nok$/ })).toBeInTheDocument();
-    expect((await screen.findAllByRole('link', { name: 'Continue: Isolation Precautions' })).length).toBeGreaterThan(0);
-    expect(await screen.findByText('Unit 4 of 8')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Isolation Precautions.*In progress/ }))
-      .toHaveAttribute('href', `http://apps.local.openedx.io/learning/course/${KEY}/home`);
-    expect(await screen.findByText('Required · Annual Infection Control 2026 · due 31 Oct 2026')).toBeInTheDocument();
-    expect(http.get).toHaveBeenCalledWith(`http://local.openedx.io/api/course_home/progress/${encodeURIComponent(KEY)}`);
+    expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Upcoming deadlines' })).toBeInTheDocument();
+    await screen.findAllByText('Infection Control');
+    expect(screen.getByRole('link', { name: 'Continue: Patient Safety Basics' }))
+      .toHaveAttribute('href', `${LEARN}/course/${PSB}`);
+    expect(screen.getByRole('link', { name: 'Infection Control' })).toHaveAttribute('href', `${LEARN}/course/${INF}/home`);
+    expect(screen.getAllByRole('link').some((a) => a.getAttribute('href') === `${LEARN}/course/${PSB}/${dashboard.data.next_quizzes[0].block_id}`))
+      .toBe(true);
+    expect(screen.getByRole('heading', { name: 'My courses (3)' })).toBeInTheDocument();
+    expect(mockClient.dashboard).toHaveBeenCalled();
   });
 
-  it('S-70: Portal down → courses still listed with a quiet notice (A3-10)', async () => {
-    mockClient.training.mockRejectedValue(Object.assign(new Error('x'), { code: 'unavailable' }));
+  it('S-90: Portal down → quiet notice, no broken widgets (NFR-C8)', async () => {
+    mockClient.dashboard.mockRejectedValue(Object.assign(new Error('x'), { code: 'unavailable' }));
     renderAt('/');
     expect(await screen.findByText('Deadlines are not available right now.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Isolation Precautions', level: 3 })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Main menu' })).toBeInTheDocument();
   });
 
-  it('S-70: missing training record → HR message (403 unmapped)', async () => {
-    mockClient.training.mockRejectedValue(Object.assign(new Error('x'), { code: 'unmapped' }));
-    renderAt('/');
-    expect(await screen.findByRole('heading', { name: 'Your training record is missing' })).toBeInTheDocument();
+  it('S-91: My courses — search and filter the full list', async () => {
+    renderAt('/courses');
+    expect(screen.getByRole('heading', { level: 1, name: 'My courses' })).toBeInTheDocument();
+    const search = await screen.findByRole('searchbox', { name: 'Search courses' });
+    await userEvent.type(search, 'fire');
+    const table = screen.getByRole('table');
+    expect(within(table).getByRole('link', { name: 'Fire Safety on the Ward' })).toHaveAttribute('href', `${LEARN}/course/${FIRE}/home`);
+    expect(within(table).queryByText('Infection Control')).toBeNull();
   });
 
   it('S-72: downloads a roadmap certificate through a signed link (F-96 BR-1)', async () => {
@@ -151,61 +172,46 @@ describe('ELMP Classroom pages (P3-4.02…4.05)', () => {
   });
 
   it('Plan 4 F-112: CE hours switched off → /hours goes home', async () => {
-    mockClient.me.mockResolvedValue({ data: { first_name: { en: 'Nok', th: 'นก' }, name: { en: 'Nok Srisuk' }, features: { ce_hours: false } } });
+    mockClient.me.mockResolvedValue(me({ ce_hours: false }));
     renderAt('/hours');
-    expect(await screen.findByRole('heading', { level: 1, name: /Nok$/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Upcoming deadlines' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
     expect(mockClient.hours).not.toHaveBeenCalledWith(2025, undefined);
   });
 
   it('unknown paths go home', async () => {
     renderAt('/nowhere');
-    expect(await screen.findByRole('heading', { level: 1, name: /Nok$/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Upcoming deadlines' })).toBeInTheDocument();
   });
 
-  it('S-70 deep link #required-41 highlights the group (J-4)', async () => {
-    const { container } = renderAt('/#required-41');
-    await waitFor(() => expect(container.querySelector('#required-41')).toHaveClass('is-highlighted'));
-    expect(within(container.querySelector('#required-41')).getByText('Overdue')).toBeInTheDocument();
+  it('never shows the platform name (A3-6)', async () => {
+    const { container } = renderAt('/');
+    await screen.findAllByText('Infection Control');
+    const words = [container.textContent, ...[...container.querySelectorAll('[title],[alt],[aria-label]')]
+      .flatMap((el) => [el.getAttribute('title'), el.getAttribute('alt'), el.getAttribute('aria-label')])].join(' ');
+    expect(words).not.toMatch(/open\s?edx|\blms\b|\bsso\b|\bmfe\b/i);
   });
 });
 
 describe('ELMP data helpers', () => {
-  beforeEach(() => mergeConfig({ LMS_BASE_URL: 'http://local.openedx.io' }));
+  beforeEach(() => mergeConfig({ LEARNING_BASE_URL: LEARN }));
 
-  it('maps Open edX course data to course views', () => {
-    const v = toCourseView(courseData(KEY, 'Isolation Precautions'), { done: 3, total: 8 });
-    expect(v).toMatchObject({
-      key: KEY, title: 'Isolation Precautions', code: 'INF101', state: 'in_progress', progress: 38, units: 8, unitsDone: 3,
+  it('adds player links to the Portal dashboard (start → course home, continue → last unit)', () => {
+    const d = withLinks({
+      ...dashboard.data,
+      deadlines: [...dashboard.data.deadlines, { ...dashboard.data.deadlines[0], course_key: FIRE, action: 'start' }],
+      next_quizzes: [...dashboard.data.next_quizzes, { course_key: INF, title: 'x' }],
     });
-    expect(v.resumeHref).toBe(`http://local.openedx.io/courses/${KEY}/jump_to/u3`);
-    const passed = toCourseView(courseData(KEY, 'X', { gradeData: { isPassing: true }, certificate: { isEarned: true, certPreviewUrl: '/certificates/abc' } }));
-    expect(passed).toMatchObject({ state: 'passed', progress: 100, certificateUrl: '/learner-dashboard/certificates' });
-    expect(toCourseView(courseData(KEY, 'X', { enrollment: { hasStarted: false } })).state).toBe('not_started');
-  });
-
-  it('Plan 4 F-111: passed by quiz with units left = almost, never 100 %; all units = completed', () => {
-    const quizOnly = toCourseView(courseData(KEY, 'X', { gradeData: { isPassing: true } }), { done: 5, total: 7 });
-    expect(quizOnly).toMatchObject({
-      state: 'almost', progress: 71, units: 7, unitsDone: 5,
-    });
-    expect(quizOnly.certificateUrl).toBeUndefined();
-    const done = toCourseView(courseData(KEY, 'X', { gradeData: { isPassing: true } }), { done: 7, total: 7 });
-    expect(done).toMatchObject({ state: 'passed', progress: 100 });
-    const allUnitsQuizFailed = toCourseView(courseData(KEY, 'X'), { done: 7, total: 7 });
-    expect(allUnitsQuizFailed).toMatchObject({ state: 'in_progress', progress: 99 });
-  });
-
-  it('completion failure means no bar, and is cached per session', async () => {
-    resetCompletionCache();
-    const http = { get: jest.fn().mockRejectedValue(new Error('404')) };
-    getAuthenticatedHttpClient.mockReturnValue(http);
-    await expect(fetchCompletion(KEY)).resolves.toBeNull();
-    await fetchCompletion(KEY);
-    expect(http.get).toHaveBeenCalledTimes(1);
+    expect(d.courses.map((c) => c.href)).toEqual([courseHomeUrl(INF), courseHomeUrl(PSB), courseHomeUrl(FIRE)]);
+    expect(d.deadlines.map((x) => x.href)).toEqual([courseResumeUrl(PSB), courseHomeUrl(FIRE)]);
+    expect(d.next_quizzes[0].href).toBe(unitUrl(PSB, dashboard.data.next_quizzes[0].block_id));
+    expect(d.next_quizzes[1].href).toBe(courseHomeUrl(INF));
+    expect(withLinks(undefined)).toBeUndefined();
+    expect([viewStatus('refreshing'), viewStatus('error')]).toEqual(['ready', 'error']);
   });
 
   it('maps notification targets to Classroom routes (doc 03 §6)', () => {
-    expect(targetPath({ kind: 'assignment', assignment_id: 41 })).toEqual({ path: '/', hash: '#required-41' });
+    expect(targetPath({ kind: 'assignment', assignment_id: 41 })).toEqual({ path: '/', hash: '#cls-d-dl' });
     expect(targetPath({ kind: 'certificate', code: 'C1' })).toEqual({ path: '/certificates', hash: '#cert-C1' });
     expect(targetPath({ kind: 'portal', url: 'http://p/x' })).toEqual({ href: 'http://p/x' });
     expect(targetPath(undefined)).toEqual({ path: '/', hash: '' });
@@ -213,7 +219,7 @@ describe('ELMP data helpers', () => {
 
   it('keeps Classroom links inside the app', () => {
     expect(toRoute('/learner-dashboard/')).toBe('/');
-    expect(toRoute('/learner-dashboard/hours')).toBe('/hours');
+    expect(toRoute('/learner-dashboard/courses')).toBe('/courses');
     expect(toRoute('http://apps.local.openedx.io/learning/course/x/home')).toBeNull();
   });
 });

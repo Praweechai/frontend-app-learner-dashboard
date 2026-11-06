@@ -1,22 +1,18 @@
-// ELMP Classroom pages (S-70 home, S-72 certificates, S-73 CE hours). Mounted by App in place of the
-// upstream Dashboard; index.jsx routes "/*" here so the nested routes below work.
+// ELMP Classroom pages — Plan 4: S-90 Home 2.0, S-91 My courses, S-72 certificates, S-73 CE hours.
+// Mounted by App in place of the upstream Dashboard; index.jsx routes "/*" here so the nested routes work.
+// Home + My courses read the Portal dashboard (CA-11); the Plan 3 home (HomeView) is gone.
 import { useState } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import {
-  Navigate, Route, Routes, useLocation,
-} from 'react-router-dom';
-import { getConfig } from '@edx/frontend-platform';
-import {
-  CertificatesView, HomeView, HoursView, LinkContext, ToastProvider, getClassroomIntl, getPortalClient,
-  messages, usePortal, useToast,
+  CertificatesView, DashboardView, HoursView, LinkContext, MyCoursesView, ToastProvider, getClassroomIntl,
+  getPortalClient, messages, usePortal, useToast,
 } from '@elmp/classroom-kit';
 import { useIntl } from '@edx/frontend-platform/i18n';
 
-import { useClassroomUser } from './ClassroomHeader';
+import { classroomLinks, useClassroomUser } from './ClassroomHeader';
+import ClassroomFrame from './ClassroomFrame';
 import RouterLink from './RouterLink';
-import useClassroomCourses from './useClassroomCourses';
-
-// LEARNING_BASE_URL already ends with /learning (Tutor MFE config).
-const learningHome = (courseKey) => `${getConfig().LEARNING_BASE_URL || '/learning'}/course/${courseKey}/home`;
+import useDashboard from './useDashboard';
 
 // Signed 5-minute PDF link (F-96 BR-1), then a normal download.
 export const useCertificateDownload = () => {
@@ -34,29 +30,29 @@ export const useCertificateDownload = () => {
 
 export const HomePage = () => {
   const { firstName, features } = useClassroomUser();
-  const { courses, loading } = useClassroomCourses();
-  const { hash } = useLocation();
-  const training = usePortal((opts) => getPortalClient().training(opts));
-  const certificates = usePortal((opts) => getPortalClient().certificates(opts));
+  const {
+    dashboard, status, reload,
+  } = useDashboard();
   const download = useCertificateDownload();
-  const highlight = /^#required-(\d+)$/.exec(hash || '')?.[1];
-  const latest = (certificates.data?.data || []).find((c) => !c.revoked_at);
-
+  const links = classroomLinks();
   return (
-    <HomeView
-      firstName={firstName || ''}
-      courses={courses}
-      coursesLoading={loading}
-      training={training.data?.data}
-      trainingStatus={training.status}
-      trainingError={training.error}
-      latestCertificate={latest}
+    <DashboardView
+      dashboard={dashboard}
+      status={status}
+      firstName={firstName || undefined}
+      now={new Date()}
+      features={features}
+      onRetry={reload}
       onDownloadCertificate={download}
-      links={{ courseHome: (c) => learningHome(c.course_key), hours: features.ce_hours ? '/learner-dashboard/hours' : undefined }}
-      highlightId={highlight}
-      onRetry={training.reload}
+      coursesHref={links.courses}
+      certificatesHref={links.certificates}
     />
   );
+};
+
+export const MyCoursesPage = () => {
+  const { dashboard, status, reload } = useDashboard();
+  return <MyCoursesView courses={dashboard?.courses || []} status={status} onRetry={reload} />;
 };
 
 export const CertificatesPage = () => {
@@ -94,12 +90,15 @@ export const HoursPage = () => {
 const ClassroomPages = () => (
   <LinkContext.Provider value={RouterLink}>
     <ToastProvider>
-      <Routes>
-        <Route index element={<HomePage />} />
-        <Route path="certificates" element={<CertificatesPage />} />
-        <Route path="hours" element={<HoursPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <ClassroomFrame>
+        <Routes>
+          <Route index element={<HomePage />} />
+          <Route path="courses" element={<MyCoursesPage />} />
+          <Route path="certificates" element={<CertificatesPage />} />
+          <Route path="hours" element={<HoursPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ClassroomFrame>
     </ToastProvider>
   </LinkContext.Provider>
 );

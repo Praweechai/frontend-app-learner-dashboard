@@ -7,7 +7,8 @@ export const POLL_MS = 5 * 60 * 1000;
 // Notification target → Classroom route (doc 03 §6). `portal` targets carry their own URL.
 export function targetPath(target) {
   switch (target?.kind) {
-    case 'assignment': return { path: '/', hash: `#required-${target.assignment_id}` };
+    // Plan 4: the home page lists deadlines in one card (S-90) → scroll to it
+    case 'assignment': return { path: '/', hash: '#cls-d-dl' };
     case 'certificate': return { path: '/certificates', hash: target.code ? `#cert-${target.code}` : '' };
     case 'portal': return { href: target.url };
     default: return { path: '/', hash: '' };

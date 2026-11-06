@@ -1,27 +1,23 @@
-import { useContext, useRef } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useContext } from 'react';
 import { getConfig } from '@edx/frontend-platform';
 import { useIntl } from '@edx/frontend-platform/i18n';
 import { AppContext } from '@edx/frontend-platform/react';
-import {
-  BottomTabs, ClassroomHeader, LinkContext, NotificationPanel, getPortalClient, localized, usePortal,
-} from '@elmp/classroom-kit';
-
-import setClassroomLanguage from './language';
-import RouterLink from './RouterLink';
-import { targetPath, useMessageList, useUnreadCount } from './useMessages';
+import { getPortalClient, localized, usePortal } from '@elmp/classroom-kit';
 
 const BASE = '/learner-dashboard';
 
 export const classroomLinks = (config = getConfig()) => ({
   home: `${BASE}/`,
+  courses: `${BASE}/courses`,
   certificates: `${BASE}/certificates`,
   hours: `${BASE}/hours`,
   account: config.ELMP_ACCOUNT_URL || undefined,
+  help: config.ELMP_HELP_URL || undefined,
   signOut: config.LOGOUT_URL || `${config.LMS_BASE_URL}/logout`,
 });
 
 export const currentTab = (pathname = '/') => {
+  if (/\/courses\/?$/.test(pathname)) { return 'courses'; }
   if (/\/certificates\/?$/.test(pathname)) { return 'certificates'; }
   if (/\/hours\/?$/.test(pathname)) { return 'hours'; }
   return 'home';
@@ -52,76 +48,8 @@ export const useClassroomUser = () => {
   };
 };
 
-// ELMP: replaces the Open edX header on the Classroom pages (S-70…S-74, doc 04 §5.1). No "Open edX" anywhere.
-const ElmpClassroomHeader = () => {
-  const { locale } = useIntl();
-  const config = getConfig();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
-  const trigger = useRef(null);
-  const {
-    user, unread: initialUnread, hasPortalWork, username, features,
-  } = useClassroomUser();
-  const [unread, setUnread] = useUnreadCount(initialUnread);
-  const open = params.get('messages') === '1';
-  const list = useMessageList(open);
-
-  const current = currentTab(location.pathname);
-  const links = {
-    ...classroomLinks(config),
-    hours: features.ce_hours ? classroomLinks(config).hours : undefined, // Plan 4 F-112
-    portal: hasPortalWork ? config.ELMP_PORTAL_HOME_URL : undefined,
-  };
-  const setOpen = (value) => {
-    const next = new URLSearchParams(params);
-    if (value) { next.set('messages', '1'); } else { next.delete('messages'); }
-    setParams(next, { replace: true });
-  };
-  const openMessages = () => {
-    trigger.current = document.activeElement;
-    setOpen(true);
-  };
-  const close = () => {
-    setOpen(false);
-    setTimeout(() => trigger.current?.focus?.(), 0);
-  };
-  const openItem = async (item) => {
-    if (!item.read_at) { setUnread((n) => Math.max(0, n - 1)); }
-    await list.markRead(item);
-    const to = targetPath(item.target);
-    if (to.href) { window.location.assign(to.href); return; }
-    navigate({ pathname: to.path, hash: to.hash });
-  };
-  const markAll = async () => { setUnread(0); await list.markAllRead(); };
-
-  return (
-    <LinkContext.Provider value={RouterLink}>
-      <ClassroomHeader
-        current={current}
-        links={links}
-        user={user.name ? user : undefined}
-        unread={unread}
-        locale={locale}
-        onLocaleChange={(code) => setClassroomLanguage(code, username)}
-        onOpenMessages={openMessages}
-        logoUrl={config.LOGO_URL}
-      />
-      <BottomTabs current={current} links={links} unread={unread} onOpenMessages={openMessages} />
-      <NotificationPanel
-        open={open}
-        onClose={close}
-        items={list.items}
-        loading={list.loading}
-        error={list.error}
-        hasMore={Boolean(list.cursor)}
-        onOpenItem={openItem}
-        onMarkAllRead={markAll}
-        onLoadMore={list.loadMore}
-        onRetry={list.reload}
-      />
-    </LinkContext.Provider>
-  );
-};
+// Plan 4 (F-115): the header lives in the Classroom shell (sidebar + top bar), drawn by ClassroomFrame
+// around the pages. App.jsx still mounts this slot, so it renders nothing.
+const ElmpClassroomHeader = () => null;
 
 export default ElmpClassroomHeader;
