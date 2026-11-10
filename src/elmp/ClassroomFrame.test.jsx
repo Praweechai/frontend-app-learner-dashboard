@@ -13,6 +13,7 @@ import setClassroomLanguage from './language';
 
 const mockClient = {
   me: jest.fn(),
+  dashboard: jest.fn(),
   unreadCount: jest.fn(),
   notifications: jest.fn(),
   markRead: jest.fn(),
@@ -61,7 +62,7 @@ const renderHeader = (locale = 'en', path = '/') => render(
   </IntlProvider>,
 );
 
-describe('ELMP Classroom shell (P4-5.01 · F-115; P3 F-98, F-100)', () => {
+describe('ELMP Classroom shell 3 (P5-4.01 · F-130; P4 F-115; P3 F-98, F-100)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mergeConfig({
@@ -70,6 +71,14 @@ describe('ELMP Classroom shell (P4-5.01 · F-115; P3 F-98, F-100)', () => {
       ELMP_ACCOUNT_URL: 'http://portal.local.openedx.io/profile',
     });
     mockClient.me.mockResolvedValue(me);
+    mockClient.dashboard.mockResolvedValue({
+      data: {
+        courses: [
+          { course_key: 'course-v1:MHB+PSB101+2026', category: 'safety', title: { en: 'Patient Safety Basics', th: 'พื้นฐานความปลอดภัยของผู้ป่วย' } },
+          { course_key: 'course-v1:MHB+REG101+2026', category: 'compliance', title: { en: 'Hospital Regulations', th: 'ระเบียบโรงพยาบาล' } },
+        ],
+      },
+    });
     mockClient.unreadCount.mockResolvedValue({ data: { unread: 4 } });
     mockClient.notifications.mockResolvedValue({ data: [note], meta: {} });
     mockClient.markRead.mockResolvedValue({});
@@ -80,23 +89,39 @@ describe('ELMP Classroom shell (P4-5.01 · F-115; P3 F-98, F-100)', () => {
     expect(classroomLinks()).toMatchObject({
       home: '/learner-dashboard/',
       courses: '/learner-dashboard/courses',
+      grades: '/learner-dashboard/grades',
+      progress: '/learner-dashboard/progress',
       certificates: '/learner-dashboard/certificates',
       hours: '/learner-dashboard/hours',
       account: 'http://portal.local.openedx.io/profile',
       signOut: 'http://local.openedx.io/logout',
     });
-    expect([currentTab('/'), currentTab('/courses'), currentTab('/certificates'), currentTab('/hours/')])
-      .toEqual(['home', 'courses', 'certificates', 'hours']);
+    expect(['/', '/courses', '/grades', '/progress/', '/certificates', '/hours/'].map(currentTab))
+      .toEqual(['home', 'courses', 'grades', 'progress', 'certificates', 'hours']);
   });
 
   it('shows the person and unread count from the Portal, page title in the top bar', async () => {
     renderHeader();
     expect(await screen.findByRole('button', { name: 'Account menu for Nok Srisuk' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Messages, 4 unread' }).length).toBeGreaterThanOrEqual(2);
-    expect(within(menu()).getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
-    expect(within(menu()).getByRole('link', { name: 'My courses' })).toHaveAttribute('href', '/learner-dashboard/courses');
-    expect(within(screen.getByRole('banner')).getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Messages, 4 unread' })).toBeInTheDocument();
+    expect(within(menu()).getByRole('link', { name: 'My Learning' })).toHaveAttribute('aria-current', 'page');
+    expect(within(menu()).getByRole('link', { name: 'Courses' })).toHaveAttribute('href', '/learner-dashboard/courses');
+    expect(within(menu()).getByRole('link', { name: 'Grades' })).toHaveAttribute('href', '/learner-dashboard/grades');
+    expect(within(menu()).getByRole('link', { name: 'Progress' })).toHaveAttribute('href', '/learner-dashboard/progress');
+    expect(screen.getByRole('heading', { level: 1, name: 'My Learning' })).toBeInTheDocument();
     expect(screen.getByText('page')).toBeInTheDocument();
+  });
+
+  it('Explore = categories of my courses, search suggests my courses and opens the Courses page', async () => {
+    renderHeader();
+    await userEvent.click(await screen.findByRole('button', { name: /Explore/ }));
+    expect(screen.getByRole('link', { name: 'Patient safety' })).toHaveAttribute('href', '/learner-dashboard/courses?category=safety');
+    expect(screen.getByRole('link', { name: 'All courses' })).toHaveAttribute('href', '/learner-dashboard/courses');
+    const box = screen.getByRole('combobox', { name: 'Search courses and help' });
+    await userEvent.type(box, 'regul');
+    expect(screen.getByRole('link', { name: 'Hospital Regulations' })).toBeInTheDocument();
+    await userEvent.type(box, '{Enter}');
+    expect(screen.getByTestId('where')).toHaveTextContent('/courses?q=regul');
   });
 
   it('the header slot itself draws nothing (the shell does)', () => {
@@ -127,19 +152,20 @@ describe('ELMP Classroom shell (P4-5.01 · F-115; P3 F-98, F-100)', () => {
 
   it('switches language through the J-8 chain', async () => {
     renderHeader();
-    await userEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'ไทย' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Choose language' }));
+    await userEvent.click(screen.getByRole('option', { name: 'ไทย (Thai)' }));
     expect(setClassroomLanguage).toHaveBeenCalledWith('th', 'emp02417');
   });
 
   it('opens messages from the bell, opens one, lands on the required group (J-6)', async () => {
     renderHeader();
     await screen.findByRole('button', { name: 'Account menu for Nok Srisuk' });
-    await userEvent.click(within(menu()).getByRole('button', { name: /^Messages/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Messages/ }));
     expect(screen.getByTestId('where')).toHaveTextContent('/?messages=1');
     const dialog = await screen.findByRole('dialog', { name: 'Messages' });
     await userEvent.click(await within(dialog).findByRole('button', { name: /Deadline passed/ }));
     expect(mockClient.markRead).toHaveBeenCalledWith('n1');
-    expect(screen.getByTestId('where')).toHaveTextContent('/#cls-d-dl');
+    expect(screen.getByTestId('where')).toHaveTextContent('/#cls3-dl');
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

@@ -9,15 +9,21 @@ const BASE = '/learner-dashboard';
 export const classroomLinks = (config = getConfig()) => ({
   home: `${BASE}/`,
   courses: `${BASE}/courses`,
+  grades: `${BASE}/grades`,
+  progress: `${BASE}/progress`,
   certificates: `${BASE}/certificates`,
   hours: `${BASE}/hours`,
   account: config.ELMP_ACCOUNT_URL || undefined,
   help: config.ELMP_HELP_URL || undefined,
   signOut: config.LOGOUT_URL || `${config.LMS_BASE_URL}/logout`,
+  privacy: config.ELMP_PRIVACY_URL || undefined,
+  accessibility: config.ELMP_ACCESSIBILITY_URL || undefined,
 });
 
 export const currentTab = (pathname = '/') => {
   if (/\/courses\/?$/.test(pathname)) { return 'courses'; }
+  if (/\/grades\/?$/.test(pathname)) { return 'grades'; }
+  if (/\/progress\/?$/.test(pathname)) { return 'progress'; }
   if (/\/certificates\/?$/.test(pathname)) { return 'certificates'; }
   if (/\/hours\/?$/.test(pathname)) { return 'hours'; }
   return 'home';
@@ -48,7 +54,7 @@ export const useClassroomUser = () => {
   };
 };
 
-// Plan 4 (F-115): the header lives in the Classroom shell (sidebar + top bar), drawn by ClassroomFrame
+// Plan 4/5 (F-115, F-130): the header lives in the Classroom shell (sidebar + top bar), drawn by ClassroomFrame
 // around the pages. App.jsx still mounts this slot, so it renders nothing.
 const ElmpClassroomHeader = () => null;
 

@@ -1,15 +1,19 @@
-// ELMP Classroom pages — Plan 4: S-90 Home 2.0, S-91 My courses, S-72 certificates, S-73 CE hours.
-// Mounted by App in place of the upstream Dashboard; index.jsx routes "/*" here so the nested routes work.
-// Home + My courses read the Portal dashboard (CA-11); the Plan 3 home (HomeView) is gone.
+// ELMP Classroom pages — Plan 5 (F-130…F-135): S-100 My Learning, S-101 Courses, S-102 Grades, S-103 Progress,
+// S-104 Certificates (+ S-73 CE hours while switched on). Mounted by App in place of the upstream Dashboard;
+// index.jsx routes "/*" here so the nested routes work. Part 1 data: Portal CA-11 dashboard + CA-07 certificates.
+// Part 2 (CA-13…CA-16) adds props only; until then those widgets stay hidden.
 import { useState } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
 import {
-  CertificatesView, DashboardView, HoursView, LinkContext, MyCoursesView, ToastProvider, getClassroomIntl,
-  getPortalClient, messages, usePortal, useToast,
+  Navigate, Route, Routes, useLocation, useSearchParams,
+} from 'react-router-dom';
+import {
+  CertificatesView2, CoursesView, GradesView, HoursView, LinkContext, MyLearningView, ProgressView, ToastProvider,
+  getClassroomIntl, getPortalClient, messages, usePortal, useToast,
 } from '@elmp/classroom-kit';
+import { getConfig } from '@edx/frontend-platform';
 import { useIntl } from '@edx/frontend-platform/i18n';
 
-import { classroomLinks, useClassroomUser } from './ClassroomHeader';
+import { useClassroomUser } from './ClassroomHeader';
 import ClassroomFrame from './ClassroomFrame';
 import RouterLink from './RouterLink';
 import useDashboard from './useDashboard';
@@ -30,39 +34,64 @@ export const useCertificateDownload = () => {
 
 export const HomePage = () => {
   const { firstName, features } = useClassroomUser();
-  const {
-    dashboard, status, reload,
-  } = useDashboard();
-  const download = useCertificateDownload();
-  const links = classroomLinks();
+  const { dashboard, status, reload } = useDashboard();
   return (
-    <DashboardView
+    <MyLearningView
       dashboard={dashboard}
       status={status}
       firstName={firstName || undefined}
       now={new Date()}
       features={features}
       onRetry={reload}
-      onDownloadCertificate={download}
-      coursesHref={links.courses}
-      certificatesHref={links.certificates}
     />
   );
 };
 
-export const MyCoursesPage = () => {
+// ?q= comes from the top-bar search, ?category= from the Explore menu; a new query remounts the view.
+export const CoursesPage = () => {
   const { dashboard, status, reload } = useDashboard();
-  return <MyCoursesView courses={dashboard?.courses || []} status={status} onRetry={reload} />;
+  const [params] = useSearchParams();
+  const { search } = useLocation();
+  return (
+    <CoursesView
+      key={search}
+      dashboard={dashboard}
+      status={status}
+      now={new Date()}
+      onRetry={reload}
+      initialQuery={params.get('q') || ''}
+      initialCategory={params.get('category') || 'all'}
+    />
+  );
+};
+
+export const GradesPage = () => {
+  const { dashboard, status, reload } = useDashboard();
+  const passMark = Number(getConfig().ELMP_QUIZ_PASS_PERCENT) || 60;
+  return <GradesView dashboard={dashboard} status={status} passMark={passMark} onRetry={reload} />;
+};
+
+export const ProgressPage = () => {
+  const { features } = useClassroomUser();
+  const { dashboard, status, reload } = useDashboard();
+  return <ProgressView dashboard={dashboard} status={status} now={new Date()} features={features} onRetry={reload} />;
 };
 
 export const CertificatesPage = () => {
+  const { user } = useClassroomUser();
+  const { dashboard } = useDashboard();
   const certificates = usePortal((opts) => getPortalClient().certificates(opts));
   const download = useCertificateDownload();
+  const config = getConfig();
   return (
-    <CertificatesView
+    <CertificatesView2
       items={certificates.data?.data || []}
-      status={certificates.status}
+      courses={dashboard?.courses || []}
+      status={certificates.status === 'refreshing' ? 'ready' : certificates.status}
       error={certificates.error}
+      learnerName={user.name || undefined}
+      logoUrl={config.LOGO_URL || undefined}
+      verifyUrl={config.ELMP_PORTAL_HOME_URL ? `${config.ELMP_PORTAL_HOME_URL}/certificates/verify` : undefined}
       onDownload={download}
       onRetry={certificates.reload}
     />
@@ -93,7 +122,9 @@ const ClassroomPages = () => (
       <ClassroomFrame>
         <Routes>
           <Route index element={<HomePage />} />
-          <Route path="courses" element={<MyCoursesPage />} />
+          <Route path="courses" element={<CoursesPage />} />
+          <Route path="grades" element={<GradesPage />} />
+          <Route path="progress" element={<ProgressPage />} />
           <Route path="certificates" element={<CertificatesPage />} />
           <Route path="hours" element={<HoursPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

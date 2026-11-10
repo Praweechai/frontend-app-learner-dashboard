@@ -98,7 +98,7 @@ const renderAt = (path) => render(
   </IntlProvider>,
 );
 
-describe('ELMP Classroom pages (P4-5.01 Home 2.0 + My courses; P3 certificates, CE hours)', () => {
+describe('ELMP Classroom pages (P5-4.01: S-100…S-104; P3 CE hours)', () => {
   const assign = jest.fn();
   const realLocation = window.location;
   beforeAll(() => {
@@ -120,48 +120,78 @@ describe('ELMP Classroom pages (P4-5.01 Home 2.0 + My courses; P3 certificates, 
     mockClient.notifications.mockResolvedValue({ data: [], meta: {} });
   });
 
-  it('S-90: dashboard from the Portal, links into the player', async () => {
+  it('S-100 My Learning: CA-11 dashboard, cards link into the player', async () => {
     renderAt('/');
-    expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'My Learning' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Upcoming deadlines' })).toBeInTheDocument();
-    await screen.findAllByText('Infection Control');
-    expect(screen.getByRole('link', { name: 'Continue: Patient Safety Basics' }))
-      .toHaveAttribute('href', `${LEARN}/course/${PSB}`);
+    expect(await screen.findByText('Welcome back, Nok. You have 2 courses in progress.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Infection Control' })).toHaveAttribute('href', `${LEARN}/course/${INF}/home`);
     expect(screen.getAllByRole('link').some((a) => a.getAttribute('href') === `${LEARN}/course/${PSB}/${dashboard.data.next_quizzes[0].block_id}`))
       .toBe(true);
-    expect(screen.getByRole('heading', { name: 'My courses (3)' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Learning streak' })).toBeInTheDocument();
     expect(mockClient.dashboard).toHaveBeenCalled();
   });
 
-  it('S-90: Portal down → quiet notice, no broken widgets (NFR-C8)', async () => {
+  it('S-100: Portal down → quiet notice, shell still works (NFR-C8)', async () => {
     mockClient.dashboard.mockRejectedValue(Object.assign(new Error('x'), { code: 'unavailable' }));
     renderAt('/');
-    expect(await screen.findByText('Deadlines are not available right now.')).toBeInTheDocument();
+    expect((await screen.findAllByText('Not available right now.')).length).toBeGreaterThan(0);
     expect(screen.getByRole('navigation', { name: 'Main menu' })).toBeInTheDocument();
   });
 
-  it('S-91: My courses — search and filter the full list', async () => {
+  it('S-101 Courses: every course, filter by name; ?q= from the top-bar search', async () => {
     renderAt('/courses');
-    expect(screen.getByRole('heading', { level: 1, name: 'My courses' })).toBeInTheDocument();
-    const search = await screen.findByRole('searchbox', { name: 'Search courses' });
-    await userEvent.type(search, 'fire');
-    const table = screen.getByRole('table');
-    expect(within(table).getByRole('link', { name: 'Fire Safety on the Ward' })).toHaveAttribute('href', `${LEARN}/course/${FIRE}/home`);
-    expect(within(table).queryByText('Infection Control')).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'Courses' })).toBeInTheDocument();
+    await screen.findByRole('link', { name: 'Fire Safety on the Ward' });
+    expect(screen.getAllByRole('article')).toHaveLength(3);
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Filter courses by name' }), 'fire');
+    expect(screen.getAllByRole('article')).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'Fire Safety on the Ward' })).toHaveAttribute('href', `${LEARN}/course/${FIRE}/home`);
   });
 
-  it('S-72: downloads a roadmap certificate through a signed link (F-96 BR-1)', async () => {
+  it('S-101: opens filtered from the search box and the Explore menu', async () => {
+    renderAt('/courses?q=patient');
+    await screen.findByRole('link', { name: 'Patient Safety Basics' });
+    expect(screen.getAllByRole('article')).toHaveLength(1);
+  });
+
+  it('S-102 Grades: course table with pass mark and details link', async () => {
+    mergeConfig({ ELMP_QUIZ_PASS_PERCENT: '70' });
+    renderAt('/grades');
+    expect(screen.getByRole('heading', { level: 1, name: 'Grades' })).toBeInTheDocument();
+    const table = await screen.findByRole('table');
+    expect(within(table).getAllByText('70%')).toHaveLength(3);
+    expect(within(table).getByRole('link', { name: 'See details: Infection Control' })).toHaveAttribute('href', `${LEARN}/course/${INF}/home`);
+    mergeConfig({ ELMP_QUIZ_PASS_PERCENT: undefined });
+  });
+
+  it('S-103 Progress: completion donut and course list', async () => {
+    renderAt('/progress');
+    expect(screen.getByRole('heading', { level: 1, name: 'Progress' })).toBeInTheDocument();
+    // (71 + 14 + 0) / 3 = 28
+    expect(await screen.findByRole('img', { name: '28% overall completion' })).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Course progress' })).getAllByRole('listitem')).toHaveLength(3);
+  });
+
+  it('S-104 Certificates: View dialog, verify link, locked cards; download through a signed link (F-96 BR-1)', async () => {
+    mergeConfig({ ELMP_PORTAL_HOME_URL: 'http://portal.local.openedx.io' });
     renderAt('/certificates');
-    await userEvent.click(await screen.findByRole('button', { name: 'Download PDF' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'View: Records & PDPA 2026' }));
+    const dialog = screen.getByRole('dialog', { name: 'Certificate: Records & PDPA 2026' });
+    expect(within(dialog).getByText('Nok Srisuk')).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.getByRole('link', { name: 'Verify' }))
+      .toHaveAttribute('href', 'http://portal.local.openedx.io/certificates/verify?code=ELMP-2026-7KQ4-9XTD');
+    expect(await screen.findAllByText('Complete the course to unlock.')).toHaveLength(3);
+    await userEvent.click(screen.getByRole('button', { name: 'Download PDF: Records & PDPA 2026' }));
     expect(mockClient.certificateLink).toHaveBeenCalledWith('ELMP-2026-7KQ4-9XTD');
     expect(assign).toHaveBeenCalledWith('http://portal.local.openedx.io/classroom/certificates/x.pdf?signature=s');
   });
 
-  it('S-72: a failed link shows a toast', async () => {
+  it('S-104: a failed link shows a toast', async () => {
     mockClient.certificateLink.mockRejectedValue(new Error('410'));
     renderAt('/certificates');
-    await userEvent.click(await screen.findByRole('button', { name: 'Download PDF' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Download PDF: Records & PDPA 2026' }));
     expect(await screen.findByText('The download could not start. Please try again.')).toBeInTheDocument();
   });
 
@@ -175,7 +205,7 @@ describe('ELMP Classroom pages (P4-5.01 Home 2.0 + My courses; P3 certificates, 
     mockClient.me.mockResolvedValue(me({ ce_hours: false }));
     renderAt('/hours');
     expect(await screen.findByRole('heading', { name: 'Upcoming deadlines' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'My Learning' })).toBeInTheDocument();
     expect(mockClient.hours).not.toHaveBeenCalledWith(2025, undefined);
   });
 
@@ -211,7 +241,7 @@ describe('ELMP data helpers', () => {
   });
 
   it('maps notification targets to Classroom routes (doc 03 §6)', () => {
-    expect(targetPath({ kind: 'assignment', assignment_id: 41 })).toEqual({ path: '/', hash: '#cls-d-dl' });
+    expect(targetPath({ kind: 'assignment', assignment_id: 41 })).toEqual({ path: '/', hash: '#cls3-dl' });
     expect(targetPath({ kind: 'certificate', code: 'C1' })).toEqual({ path: '/certificates', hash: '#cert-C1' });
     expect(targetPath({ kind: 'portal', url: 'http://p/x' })).toEqual({ href: 'http://p/x' });
     expect(targetPath(undefined)).toEqual({ path: '/', hash: '' });

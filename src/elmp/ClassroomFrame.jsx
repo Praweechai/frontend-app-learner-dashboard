@@ -1,24 +1,39 @@
-// ELMP Plan 4 shell (F-115, S-90/S-91): sidebar + top bar + phone tabs from the kit, messages panel (S-74).
-// Replaces the Plan 3 top header. No "Open edX" anywhere.
-import { useRef } from 'react';
+// ELMP Plan 5 shell (F-130, S-100…S-104): kit Shell 3 — sidebar, thin top bar (Explore, search suggestions,
+// EN/TH, help, messages, profile), HR banner slot, phone tabs — plus the messages panel (S-74).
+// Part 1: Explore categories and search suggestions come from the learner's own courses (CA-11); the HR banner
+// (CA-14) stays empty until Part 2. No "Open edX" anywhere.
+import { useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getConfig } from '@edx/frontend-platform';
 import { useIntl } from '@edx/frontend-platform/i18n';
 import {
-  ClassroomShell, NotificationPanel, getClassroomIntl, messages,
+  ClassroomShell3, NotificationPanel, categoryLabel, getClassroomIntl, localized, messages,
 } from '@elmp/classroom-kit';
 
 import { classroomLinks, currentTab, useClassroomUser } from './ClassroomHeader';
 import setClassroomLanguage from './language';
+import useDashboard from './useDashboard';
 import { targetPath, useMessageList, useUnreadCount } from './useMessages';
 
 const TITLES = {
-  home: messages.navHomeShort,
-  courses: messages.navCourses,
-  certificates: messages.navCertificates,
+  home: messages.shell3MyLearning,
+  courses: messages.shell3Courses,
+  grades: messages.shell3Grades,
+  progress: messages.shell3Progress,
+  certificates: messages.shell3Certificates,
   hours: messages.navHours,
 };
+
+const catKey = (c) => (typeof c.category === 'object' ? c.category?.key : c.category) || 'general';
+
+// Explore menu = the categories of the learner's courses → Courses page filtered; search = course titles.
+export const exploreItems = (courses, coursesHref, intl) => [
+  ...new Map((courses || []).map((c) => [catKey(c), categoryLabel(c.category || 'general', intl)])).entries(),
+].map(([key, label]) => ({ label, href: `${coursesHref}?category=${encodeURIComponent(key)}` }));
+
+export const searchItems = (courses, locale) => (courses || [])
+  .map((c) => ({ label: localized(c.title, locale), href: c.href }));
 
 const ClassroomFrame = ({ children }) => {
   const { locale } = useIntl();
@@ -28,18 +43,24 @@ const ClassroomFrame = ({ children }) => {
   const [params, setParams] = useSearchParams();
   const trigger = useRef(null);
   const {
-    user, unread: initialUnread, hasPortalWork, username, features,
+    user, unread: initialUnread, username, features,
   } = useClassroomUser();
+  const { dashboard } = useDashboard();
   const [unread, setUnread] = useUnreadCount(initialUnread);
   const open = params.get('messages') === '1';
   const list = useMessageList(open);
+  const intl = getClassroomIntl(locale);
 
   const current = currentTab(location.pathname);
   const links = {
     ...classroomLinks(config),
     hours: features.ce_hours ? classroomLinks(config).hours : undefined, // Plan 4 F-112
-    portal: hasPortalWork ? config.ELMP_PORTAL_HOME_URL : undefined,
   };
+  const courses = dashboard?.courses;
+  const categories = useMemo(() => exploreItems(courses, links.courses, intl), [courses, links.courses, intl]);
+  const suggestions = useMemo(() => searchItems(courses, locale), [courses, locale]);
+  const helpItems = links.help ? [{ label: intl.formatMessage(messages.shell3Help), href: links.help }] : [];
+
   const setOpen = (value) => {
     const next = new URLSearchParams(params);
     if (value) { next.set('messages', '1'); } else { next.delete('messages'); }
@@ -64,9 +85,9 @@ const ClassroomFrame = ({ children }) => {
 
   return (
     <>
-      <ClassroomShell
+      <ClassroomShell3
         current={current}
-        title={getClassroomIntl(locale).formatMessage(TITLES[current])}
+        title={intl.formatMessage(TITLES[current])}
         links={links}
         user={user.name ? user : undefined}
         unread={unread}
@@ -74,10 +95,16 @@ const ClassroomFrame = ({ children }) => {
         onLocaleChange={(code) => setClassroomLanguage(code, username)}
         onOpenMessages={openMessages}
         logoUrl={config.LOGO_URL || undefined}
+        categories={categories}
+        allCoursesHref={links.courses}
+        searchItems={features.search === false ? undefined : suggestions}
+        onSearch={(q) => navigate(q ? `/courses?q=${encodeURIComponent(q)}` : '/courses')}
+        helpItems={helpItems}
+        announcement={null /* CA-14 HR banner arrives in Part 2 (P5-8) */}
         pageAs="div" /* App.jsx owns <main id="main"> */
       >
         {children}
-      </ClassroomShell>
+      </ClassroomShell3>
       <NotificationPanel
         open={open}
         onClose={close}
