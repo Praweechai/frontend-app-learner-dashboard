@@ -9,7 +9,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import ClassroomPages from './ClassroomPages';
 import {
-  courseHomeUrl, courseResumeUrl, unitUrl, viewStatus, withLinks,
+  courseResumeUrl, unitUrl, viewStatus, withLinks,
 } from './useDashboard';
 import { targetPath } from './useMessages';
 import { toRoute } from './RouterLink';
@@ -24,6 +24,8 @@ const mockClient = {
   notifications: jest.fn(),
   markRead: jest.fn(),
   markAllRead: jest.fn(),
+  grades: jest.fn(),
+  compliance: jest.fn(),
 };
 jest.mock('@elmp/classroom-kit', () => ({
   ...jest.requireActual('@elmp/classroom-kit'),
@@ -85,7 +87,13 @@ const hours = (year) => ({
   },
 });
 const me = (features = { ce_hours: true, streak: true }) => ({
-  data: { first_name: { en: 'Nok', th: 'นก' }, name: { en: 'Nok Srisuk' }, features },
+  data: {
+    first_name: { en: 'Nok', th: 'นก' },
+    name: { en: 'Nok Srisuk' },
+    position: { en: 'Registered Nurse' },
+    department: { en: 'ICU' },
+    features,
+  },
 });
 
 const renderAt = (path) => render(
@@ -124,12 +132,49 @@ describe('ELMP Classroom pages (P5-4.01: S-100…S-104; P3 CE hours)', () => {
     renderAt('/');
     expect(screen.getByRole('heading', { level: 1, name: 'My Learning' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Upcoming deadlines' })).toBeInTheDocument();
-    expect(await screen.findByText('Welcome back, Nok. You have 2 courses in progress.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Infection Control' })).toHaveAttribute('href', `${LEARN}/course/${INF}/home`);
+    expect(await screen.findByText('1 course needs your attention')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Infection Control' })).toHaveAttribute('href', `${LEARN}/course/${INF}`);
+    // resume hero = the overdue course, straight into the player
+    expect(screen.getAllByRole('link').find((a) => a.classList.contains('cls3-resume'))).toHaveAttribute('href', `${LEARN}/course/${PSB}`);
     expect(screen.getAllByRole('link').some((a) => a.getAttribute('href') === `${LEARN}/course/${PSB}/${dashboard.data.next_quizzes[0].block_id}`))
       .toBe(true);
-    expect(screen.getByRole('heading', { name: 'Learning streak' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Learning streak' })).toBeInTheDocument(); // no learning_time yet
     expect(mockClient.dashboard).toHaveBeenCalled();
+    expect(mockClient.compliance).not.toHaveBeenCalled(); // features.compliance off until V-6
+  });
+
+  it('Learner v2: features.compliance + grades on → CA-17 licence and groups, CA-16 rows', async () => {
+    mockClient.me.mockResolvedValue(me({ streak: true, compliance: true, grades: true }));
+    mockClient.compliance.mockResolvedValue({
+      data: {
+        groups: [{
+          key: 'everyone',
+          items: [{
+            name: { en: 'Patient Safety Basics' }, course_key: PSB, every_months: 12, state: 'overdue', date: '2026-10-10',
+          }],
+        }],
+        licence: {
+          name: { en: 'Nursing licence' }, have: 32, need: 50, renew_by: '2028-05-31',
+        },
+      },
+    });
+    mockClient.grades.mockResolvedValue({
+      data: {
+        courses: [{
+          course_key: INF, code: 'INF101', title: { en: 'Infection Control' }, grade_pct: 93, passed: null, started_at: '2026-10-02T08:00:00+07:00', due_at: null, completed_at: null, parts: [],
+        }],
+      },
+    });
+    const { unmount } = renderAt('/');
+    expect(await screen.findByRole('region', { name: 'My licence' })).toBeInTheDocument();
+    unmount();
+    const progress = renderAt('/progress');
+    expect(await screen.findByRole('region', { name: 'Everyone' })).toBeInTheDocument();
+    expect(screen.getByText('1 item needs action')).toBeInTheDocument();
+    progress.unmount();
+    renderAt('/grades');
+    expect(await screen.findByText('2 Oct 2026')).toBeInTheDocument();
+    expect(screen.getByText('93%')).toBeInTheDocument();
   });
 
   it('S-100: Portal down → quiet notice, shell still works (NFR-C8)', async () => {
@@ -146,7 +191,7 @@ describe('ELMP Classroom pages (P5-4.01: S-100…S-104; P3 CE hours)', () => {
     expect(screen.getAllByRole('article')).toHaveLength(3);
     await userEvent.type(screen.getByRole('searchbox', { name: 'Filter courses by name' }), 'fire');
     expect(screen.getAllByRole('article')).toHaveLength(1);
-    expect(screen.getByRole('link', { name: 'Fire Safety on the Ward' })).toHaveAttribute('href', `${LEARN}/course/${FIRE}/home`);
+    expect(screen.getByRole('link', { name: 'Fire Safety on the Ward' })).toHaveAttribute('href', `${LEARN}/course/${FIRE}`);
   });
 
   it('S-101: opens filtered from the search box and the Explore menu', async () => {
@@ -155,22 +200,23 @@ describe('ELMP Classroom pages (P5-4.01: S-100…S-104; P3 CE hours)', () => {
     expect(screen.getAllByRole('article')).toHaveLength(1);
   });
 
-  it('S-102 Grades: course table with pass mark and details link', async () => {
+  it('S-102 Grades: one row per course with pass mark, links into the player; no CA-16 call while off', async () => {
     mergeConfig({ ELMP_QUIZ_PASS_PERCENT: '70' });
     renderAt('/grades');
     expect(screen.getByRole('heading', { level: 1, name: 'Grades' })).toBeInTheDocument();
-    const table = await screen.findByRole('table');
-    expect(within(table).getAllByText('70%')).toHaveLength(3);
-    expect(within(table).getByRole('link', { name: 'See details: Infection Control' })).toHaveAttribute('href', `${LEARN}/course/${INF}/home`);
+    const inf = await screen.findByRole('link', { name: 'Infection Control' });
+    expect(inf).toHaveAttribute('href', `${LEARN}/course/${INF}`);
+    expect(screen.getAllByText('/ 70% to pass')).toHaveLength(1); // only INF101 has a score
+    expect(mockClient.grades).not.toHaveBeenCalled();
     mergeConfig({ ELMP_QUIZ_PASS_PERCENT: undefined });
   });
 
-  it('S-103 Progress: completion donut and course list', async () => {
+  it('S-103 Progress: "Am I up to date?" from CA-11 required courses before CA-17', async () => {
     renderAt('/progress');
     expect(screen.getByRole('heading', { level: 1, name: 'Progress' })).toBeInTheDocument();
-    // (71 + 14 + 0) / 3 = 28
-    expect(await screen.findByRole('img', { name: '28% overall completion' })).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Course progress' })).getAllByRole('listitem')).toHaveLength(3);
+    const req = await screen.findByRole('region', { name: 'Required training' });
+    expect(within(req).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(req).getByRole('link', { name: 'Continue: Patient Safety Basics' })).toHaveAttribute('href', `${LEARN}/course/${PSB}`);
   });
 
   it('S-104 Certificates: View dialog, verify link, locked cards; download through a signed link (F-96 BR-1)', async () => {
@@ -226,16 +272,17 @@ describe('ELMP Classroom pages (P5-4.01: S-100…S-104; P3 CE hours)', () => {
 describe('ELMP data helpers', () => {
   beforeEach(() => mergeConfig({ LEARNING_BASE_URL: LEARN }));
 
-  it('adds player links to the Portal dashboard (start → course home, continue → last unit)', () => {
+  it('every course link opens the player straight away (no course home page)', () => {
     const d = withLinks({
       ...dashboard.data,
       deadlines: [...dashboard.data.deadlines, { ...dashboard.data.deadlines[0], course_key: FIRE, action: 'start' }],
       next_quizzes: [...dashboard.data.next_quizzes, { course_key: INF, title: 'x' }],
     });
-    expect(d.courses.map((c) => c.href)).toEqual([courseHomeUrl(INF), courseHomeUrl(PSB), courseHomeUrl(FIRE)]);
-    expect(d.deadlines.map((x) => x.href)).toEqual([courseResumeUrl(PSB), courseHomeUrl(FIRE)]);
+    expect(d.courses.map((c) => c.href)).toEqual([courseResumeUrl(INF), courseResumeUrl(PSB), courseResumeUrl(FIRE)]);
+    expect(d.deadlines.map((x) => x.href)).toEqual([courseResumeUrl(PSB), courseResumeUrl(FIRE)]);
     expect(d.next_quizzes[0].href).toBe(unitUrl(PSB, dashboard.data.next_quizzes[0].block_id));
-    expect(d.next_quizzes[1].href).toBe(courseHomeUrl(INF));
+    expect(d.next_quizzes[1].href).toBe(courseResumeUrl(INF));
+    expect(JSON.stringify(d)).not.toMatch(/\/home"/);
     expect(withLinks(undefined)).toBeUndefined();
     expect([viewStatus('refreshing'), viewStatus('error')]).toEqual(['ready', 'error']);
   });

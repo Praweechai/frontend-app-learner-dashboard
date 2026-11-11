@@ -2,6 +2,8 @@
 // S-104 Certificates (+ S-73 CE hours while switched on). Mounted by App in place of the upstream Dashboard;
 // index.jsx routes "/*" here so the nested routes work. Part 1 data: Portal CA-11 dashboard + CA-07 certificates.
 // Part 2 (CA-13…CA-16) adds props only; until then those widgets stay hidden.
+// Learner v2 (kit 2.1, V-2.01): CA-16 grades + CA-17 compliance are fetched only when /me switches them on
+// (features.grades / features.compliance, V-6); CA-11 `learning_time` comes with the dashboard (features.streak).
 import { useState } from 'react';
 import {
   Navigate, Route, Routes, useLocation, useSearchParams,
@@ -16,7 +18,7 @@ import { useIntl } from '@edx/frontend-platform/i18n';
 import { useClassroomUser } from './ClassroomHeader';
 import ClassroomFrame from './ClassroomFrame';
 import RouterLink from './RouterLink';
-import useDashboard from './useDashboard';
+import useDashboard, { useFeatureData } from './useDashboard';
 
 // Signed 5-minute PDF link (F-96 BR-1), then a normal download.
 export const useCertificateDownload = () => {
@@ -32,12 +34,18 @@ export const useCertificateDownload = () => {
   };
 };
 
+const jobLine = (user) => [user.position, user.department].filter(Boolean).join(' · ') || undefined;
+const getCompliance = (client, opts) => client.compliance(opts);
+const getGrades = (client, opts) => client.grades(opts);
+
 export const HomePage = () => {
   const { firstName, features } = useClassroomUser();
   const { dashboard, status, reload } = useDashboard();
+  const compliance = useFeatureData(features.compliance, getCompliance);
   return (
     <MyLearningView
       dashboard={dashboard}
+      compliance={compliance}
       status={status}
       firstName={firstName || undefined}
       now={new Date()}
@@ -66,15 +74,30 @@ export const CoursesPage = () => {
 };
 
 export const GradesPage = () => {
+  const { features } = useClassroomUser();
   const { dashboard, status, reload } = useDashboard();
+  const grades = useFeatureData(features.grades, getGrades);
   const passMark = Number(getConfig().ELMP_QUIZ_PASS_PERCENT) || 60;
-  return <GradesView dashboard={dashboard} status={status} passMark={passMark} onRetry={reload} />;
+  return <GradesView dashboard={dashboard} grades={grades} status={status} passMark={passMark} onRetry={reload} />;
 };
 
 export const ProgressPage = () => {
-  const { features } = useClassroomUser();
+  const { features, user } = useClassroomUser();
   const { dashboard, status, reload } = useDashboard();
-  return <ProgressView dashboard={dashboard} status={status} now={new Date()} features={features} onRetry={reload} />;
+  const compliance = useFeatureData(features.compliance, getCompliance);
+  const grades = useFeatureData(features.grades, getGrades);
+  return (
+    <ProgressView
+      dashboard={dashboard}
+      compliance={compliance}
+      grades={grades}
+      jobTitle={jobLine(user)}
+      status={status}
+      now={new Date()}
+      features={features}
+      onRetry={reload}
+    />
+  );
 };
 
 export const CertificatesPage = () => {
