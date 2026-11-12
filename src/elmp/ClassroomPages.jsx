@@ -18,7 +18,7 @@ import { useIntl } from '@edx/frontend-platform/i18n';
 import { useClassroomUser } from './ClassroomHeader';
 import ClassroomFrame from './ClassroomFrame';
 import RouterLink from './RouterLink';
-import useDashboard, { useFeatureData } from './useDashboard';
+import useDashboard, { useCatalogue, useFeatureData } from './useDashboard';
 
 // Signed 5-minute PDF link (F-96 BR-1), then a normal download.
 export const useCertificateDownload = () => {
@@ -37,15 +37,20 @@ export const useCertificateDownload = () => {
 const jobLine = (user) => [user.position, user.department].filter(Boolean).join(' · ') || undefined;
 const getCompliance = (client, opts) => client.compliance(opts);
 const getGrades = (client, opts) => client.grades(opts);
+const getAchievements = (client, opts) => client.achievements(opts); // Plan 5 P5-9 (CA-13)
 
 export const HomePage = () => {
   const { firstName, features } = useClassroomUser();
   const { dashboard, status, reload } = useDashboard();
   const compliance = useFeatureData(features.compliance, getCompliance);
+  const achievements = useFeatureData(features.achievements, getAchievements);
+  const catalogue = useCatalogue(features.catalogue);
   return (
     <MyLearningView
       dashboard={dashboard}
       compliance={compliance}
+      achievements={achievements}
+      catalogue={catalogue}
       status={status}
       firstName={firstName || undefined}
       now={new Date()}
@@ -57,13 +62,16 @@ export const HomePage = () => {
 
 // ?q= comes from the top-bar search, ?category= from the Explore menu; a new query remounts the view.
 export const CoursesPage = () => {
+  const { features } = useClassroomUser();
   const { dashboard, status, reload } = useDashboard();
+  const catalogue = useCatalogue(features.catalogue); // Plan 5 P5-9: every course the learner may see (CA-15)
   const [params] = useSearchParams();
   const { search } = useLocation();
   return (
     <CoursesView
       key={search}
       dashboard={dashboard}
+      catalogue={catalogue}
       status={status}
       now={new Date()}
       onRetry={reload}

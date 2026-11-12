@@ -18,6 +18,8 @@ const mockClient = {
   notifications: jest.fn(),
   markRead: jest.fn(),
   markAllRead: jest.fn(),
+  announcement: jest.fn(),
+  catalogue: jest.fn(),
 };
 jest.mock('@elmp/classroom-kit', () => ({
   ...jest.requireActual('@elmp/classroom-kit'),
@@ -83,6 +85,7 @@ describe('ELMP Classroom shell 3 (P5-4.01 · F-130; P4 F-115; P3 F-98, F-100)', 
     mockClient.notifications.mockResolvedValue({ data: [note], meta: {} });
     mockClient.markRead.mockResolvedValue({});
     mockClient.markAllRead.mockResolvedValue({});
+    mockClient.announcement.mockResolvedValue({ data: null });
   });
 
   it('links the Classroom pages and signs out through the LMS', () => {
@@ -122,6 +125,41 @@ describe('ELMP Classroom shell 3 (P5-4.01 · F-130; P4 F-115; P3 F-98, F-100)', 
     expect(screen.getByRole('link', { name: 'Hospital Regulations' })).toBeInTheDocument();
     await userEvent.type(box, '{Enter}');
     expect(screen.getByTestId('where')).toHaveTextContent('/courses?q=regul');
+  });
+
+  it('Plan 5 P5-9: shows HR\'s banner (CA-14) with its link; none when the Portal sends null', async () => {
+    mockClient.announcement.mockResolvedValue({
+      data: {
+        id: 7,
+        tone: 'urgent',
+        text: { en: 'Finish INF101 by 30 November.', th: 'เรียน INF101 ให้จบภายใน 30 พ.ย.' },
+        link: { href: '/learner-dashboard/courses', label: { en: 'Open courses', th: 'เปิดหลักสูตร' } },
+        starts_at: '2026-11-01T00:00:00+07:00',
+        ends_at: '2026-11-30T23:59:00+07:00',
+      },
+    });
+    renderHeader();
+    expect(await screen.findByText(/Finish INF101 by 30 November/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open courses' })).toHaveAttribute('href', '/learner-dashboard/courses');
+  });
+
+  it('Plan 5 P5-9: with the catalogue switched on, Explore + search use every course the learner may see (CA-15)', async () => {
+    mockClient.me.mockResolvedValue({ data: { ...me.data, features: { catalogue: true } } });
+    mockClient.catalogue.mockResolvedValue({
+      data: [{
+        course_key: 'course-v1:MHB+FIRE101+2026',
+        code: 'FIRE101',
+        enrolled: false,
+        href: 'http://lms/courses/x/courseware',
+        title: { en: 'Fire Safety', th: 'อัคคีภัย' },
+        category: { key: 'emergency', en: 'Emergency', th: 'ฉุกเฉิน' },
+      }],
+    });
+    renderHeader();
+    await screen.findByText('page');
+    await userEvent.click(await screen.findByRole('button', { name: /Explore/ }));
+    expect(await screen.findByRole('link', { name: 'Emergency' })).toHaveAttribute('href', '/learner-dashboard/courses?category=emergency');
+    expect(mockClient.catalogue).toHaveBeenCalledWith({ perPage: 50 }, undefined);
   });
 
   it('the header slot itself draws nothing (the shell does)', () => {

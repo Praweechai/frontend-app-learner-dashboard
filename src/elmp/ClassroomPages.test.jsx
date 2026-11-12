@@ -9,7 +9,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import ClassroomPages from './ClassroomPages';
 import {
-  courseResumeUrl, unitUrl, viewStatus, withLinks,
+  courseResumeUrl, unitUrl, viewStatus, withCatalogueLinks, withLinks,
 } from './useDashboard';
 import { targetPath } from './useMessages';
 import { toRoute } from './RouterLink';
@@ -285,6 +285,15 @@ describe('ELMP data helpers', () => {
     expect(JSON.stringify(d)).not.toMatch(/\/home"/);
     expect(withLinks(undefined)).toBeUndefined();
     expect([viewStatus('refreshing'), viewStatus('error')]).toEqual(['ready', 'error']);
+  });
+
+  it('catalogue: my courses open the player, others keep the Portal link (enrolment page)', () => {
+    const items = withCatalogueLinks([
+      { course_key: INF, enrolled: true, href: 'http://lms/courses/inf/courseware' },
+      { course_key: FIRE, enrolled: false, href: 'http://lms/courses/fire/courseware' },
+    ]);
+    expect(items.map((e) => e.href)).toEqual([courseResumeUrl(INF), 'http://lms/courses/fire/courseware']);
+    expect(withCatalogueLinks(undefined)).toBeUndefined();
   });
 
   it('maps notification targets to Classroom routes (doc 03 §6)', () => {

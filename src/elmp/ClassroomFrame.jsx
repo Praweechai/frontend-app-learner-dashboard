@@ -1,19 +1,20 @@
 // ELMP Plan 5 shell (F-130, S-100…S-104): kit Shell 3 — sidebar, thin top bar (Explore, search suggestions,
 // EN/TH, help, messages, profile), HR banner slot, phone tabs — plus the messages panel (S-74).
-// Part 1: Explore categories and search suggestions come from the learner's own courses (CA-11); the HR banner
-// (CA-14) stays empty until Part 2. No "Open edX" anywhere.
+// Part 1: Explore categories and search suggestions come from the learner's own courses (CA-11).
+// Part 2 (P5-9): with features.catalogue they come from every course the learner may see (CA-15); the HR banner
+// is CA-14 (null = none; an older Portal without it = none). No "Open edX" anywhere.
 import { useMemo, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getConfig } from '@edx/frontend-platform';
 import { useIntl } from '@edx/frontend-platform/i18n';
 import {
-  ClassroomShell3, NotificationPanel, categoryLabel, getClassroomIntl, localized, messages,
+  ClassroomShell3, NotificationPanel, categoryLabel, getClassroomIntl, getPortalClient, localized, messages, usePortal,
 } from '@elmp/classroom-kit';
 
 import { classroomLinks, currentTab, useClassroomUser } from './ClassroomHeader';
 import setClassroomLanguage from './language';
-import useDashboard from './useDashboard';
+import useDashboard, { useCatalogue } from './useDashboard';
 import { targetPath, useMessageList, useUnreadCount } from './useMessages';
 
 const TITLES = {
@@ -34,6 +35,8 @@ export const exploreItems = (courses, coursesHref, intl) => [
 
 export const searchItems = (courses, locale) => (courses || [])
   .map((c) => ({ label: localized(c.title, locale), href: c.href }));
+
+const getAnnouncement = (opts) => getPortalClient().announcement(opts);
 
 const ClassroomFrame = ({ children }) => {
   const { locale } = useIntl();
@@ -56,7 +59,9 @@ const ClassroomFrame = ({ children }) => {
     ...classroomLinks(config),
     hours: features.ce_hours ? classroomLinks(config).hours : undefined, // Plan 4 F-112
   };
-  const courses = dashboard?.courses;
+  const catalogue = useCatalogue(features.catalogue);
+  const announcement = usePortal(getAnnouncement).data?.data || null;
+  const courses = catalogue || dashboard?.courses;
   const categories = useMemo(() => exploreItems(courses, links.courses, intl), [courses, links.courses, intl]);
   const suggestions = useMemo(() => searchItems(courses, locale), [courses, locale]);
   const helpItems = links.help ? [{ label: intl.formatMessage(messages.shell3Help), href: links.help }] : [];
@@ -100,7 +105,7 @@ const ClassroomFrame = ({ children }) => {
         searchItems={features.search === false ? undefined : suggestions}
         onSearch={(q) => navigate(q ? `/courses?q=${encodeURIComponent(q)}` : '/courses')}
         helpItems={helpItems}
-        announcement={null /* CA-14 HR banner arrives in Part 2 (P5-8) */}
+        announcement={announcement}
         pageAs="div" /* App.jsx owns <main id="main"> */
       >
         {children}

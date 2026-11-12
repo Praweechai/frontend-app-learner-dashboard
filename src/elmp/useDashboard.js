@@ -35,6 +35,17 @@ export function useFeatureData(enabled, call) {
   return enabled ? res.data?.data : undefined;
 }
 
+// Plan 5 Part 2 (P5-9): CA-15 catalogue when /me switches it on. Courses the learner is in open the player like the
+// rest of the Classroom; the others keep the Portal link (Open edX's course page, where enrolment happens).
+export const withCatalogueLinks = (items) => (items
+  ? items.map((e) => ({ ...e, href: e.enrolled ? courseResumeUrl(e.course_key) : e.href }))
+  : items);
+const getCatalogue = (client, opts) => client.catalogue({ perPage: 50 }, opts);
+export function useCatalogue(enabled) {
+  const data = useFeatureData(enabled, getCatalogue);
+  return useMemo(() => withCatalogueLinks(data), [data]);
+}
+
 export default function useDashboard() {
   const res = usePortal((opts) => getPortalClient().dashboard(opts));
   const dashboard = useMemo(() => withLinks(res.data?.data), [res.data]);
